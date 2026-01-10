@@ -99,9 +99,11 @@ class CodeInspector:
     # ---------------------------------------------------------
     def get_signature_lines(self, name: str) -> List[Tuple[int, int]]:
         """
-        Returns line ranges for the signature. 
+        Returns line ranges for the signature.
         Includes full body of @overloads (since they are just signatures)
         and the header of the actual implementation (decorators + def line).
+
+        This is a test to see what's changed by adding a line to the docstring.
         """
         nodes = self._find_nodes(name)
         ranges = []
@@ -253,9 +255,9 @@ def main():
         print(f"4. Impl (no docstring) Lines: {inspector.get_implementation_without_docstring_lines(target_func)}")
         
         # Note: Git commands will only work if this file is actually inside a git repo
-        # print("\n5. Git Signature History:\n", inspector.get_git_history_signature(target_func))
-        # print("\n6. Git Docstring History:\n", inspector.get_git_history_docstring(target_func))
-        # print("\n7. Git Body History:\n", inspector.get_git_history_body(target_func))
+        print("\n5. Git Signature History:\n", inspector.get_git_history_signature(target_func))
+        print("\n6. Git Docstring History:\n", inspector.get_git_history_docstring(target_func))
+        print("\n7. Git Body History:\n", inspector.get_git_history_body(target_func))
 
     except Exception as e:
         print(f"Error: {e}")
