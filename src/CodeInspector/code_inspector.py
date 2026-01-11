@@ -1,7 +1,8 @@
 import ast
 import subprocess
 import os
-from typing import List, Tuple, Optional, Dict, Union
+import re
+from typing import Any, List, Tuple, Optional, Dict, Union
 
 class CodeInspector:
     def __init__(self, file_path: str):
@@ -55,12 +56,14 @@ class CodeInspector:
                 return first_node
         return None
 
-    def _run_git_log_L(self, line_ranges: List[Tuple[int, int]]) -> str:
+    def _run_git_log_L(self, line_ranges: List[Tuple[int, int]], commits: int = 5) -> str:
         """
         Runs `git log -L` for the specific line ranges.
         """
         if not line_ranges:
             return "No lines found to analyze."
+
+        # print("self.file_path: " + self.file_path)
 
         output_log = []
         for start, end in line_ranges:
@@ -70,9 +73,11 @@ class CodeInspector:
             cmd = [
                 "git", "log", 
                 "-L", f"{start},{end}:{self.file_path}", 
-                "--max-count=5" # Limit to last 5 commits to keep output readable
+                f"--max-count={commits}"
             ]
             
+            print("cmd: " + " ".join(cmd))
+
             try:
                 result = subprocess.run(
                     cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(self.file_path))
@@ -85,6 +90,7 @@ class CodeInspector:
                 output_log.append(f"Git execution failed: {str(e)}")
                 
         return "\n".join(output_log)
+        # return self.parse_git_log_to_dict("\n".join(output_log))
 
     # ---------------------------------------------------------
     # 1) Find code lines for definition
@@ -238,26 +244,126 @@ class CodeInspector:
 
         return self._run_git_log_L(ranges)
 
+    def parse_git_log_to_dict(self, log_output: str) -> Dict[str, Dict[str, Any]]:
+        """
+        Parses a raw git log string into a dictionary of dictionaries.
+        
+        Structure:
+        {
+            "commit_hash": {
+                "author_name": str,
+                "author_email": str,
+                "date": str,
+                "message": str,
+                "diff": str
+            },
+            ...
+        }
+        """
+        commits = {}
+        
+        # We track the current hash separately to use it as the key later
+        current_hash = None
+        current_data = {}
+        
+        # Regex patterns
+        commit_pattern = re.compile(r'^commit\s+([0-9a-f]{40})')
+        author_pattern = re.compile(r'^Author:\s+(.+)\s+<(.+)>')
+        date_pattern = re.compile(r'^Date:\s+(.+)')
+        diff_start_pattern = re.compile(r'^diff\s--git')
+
+        lines = log_output.splitlines()
+        state = "HEADER" # Options: HEADER, MESSAGE, DIFF
+        
+        for line in lines:
+            commit_match = commit_pattern.match(line)
+            
+            # --- NEW COMMIT FOUND ---
+            if commit_match:
+                # Save previous commit if it exists
+                if current_hash and current_data:
+                    current_data['message'] = "\n".join(current_data['message']).strip()
+                    current_data['diff'] = "\n".join(current_data['diff'])
+                    commits[current_hash] = current_data
+                
+                # Start new commit
+                current_hash = commit_match.group(1)
+                current_data = {
+                    'author_name': None,
+                    'author_email': None,
+                    'date': None,
+                    'message': [],
+                    'diff': []
+                }
+                state = "HEADER"
+                continue
+
+            # Skip if we haven't found the first commit line yet
+            if current_hash is None:
+                continue
+
+            # --- HEADER STATE ---
+            if state == "HEADER":
+                author_match = author_pattern.match(line)
+                if author_match:
+                    current_data['author_name'] = author_match.group(1).strip()
+                    current_data['author_email'] = author_match.group(2).strip()
+                    continue
+                
+                date_match = date_pattern.match(line)
+                if date_match:
+                    current_data['date'] = date_match.group(1).strip()
+                    state = "MESSAGE" 
+                    continue
+
+            # --- MESSAGE STATE ---
+            elif state == "MESSAGE":
+                if diff_start_pattern.match(line):
+                    state = "DIFF"
+                    current_data['diff'].append(line)
+                    continue
+                
+                current_data['message'].append(line)
+
+            # --- DIFF STATE ---
+            elif state == "DIFF":
+                current_data['diff'].append(line)
+
+        # --- SAVE FINAL COMMIT ---
+        if current_hash and current_data:
+            current_data['message'] = "\n".join(current_data['message']).strip()
+            current_data['diff'] = "\n".join(current_data['diff'])
+            commits[current_hash] = current_data
+
+        return commits
+
+    # --- Quick Test ---
+    # Assuming 'log_output' variable contains the text you provided
+    # result = parse_git_log_to_dict(log_output)
+    # print(result.keys()) 
+    # Output: dict_keys(['8672652f33830474d04b435f85cb46973c93b66c', '1439edadf2d0b594f08a5da2490080a5ee778ea5'])
 
 def main():
     # Create a dummy python file to test the script on itself or another file
-    target_file = "./src/CodeInspector/code_inspector.py" 
+    target_file = os.getcwd() + "\\src\\CodeInspector\\code_inspector.py"
     target_func = "get_signature_lines" # Analyzing one of the functions above
 
     try:
         inspector = CodeInspector(target_file)
         
-        print(f"--- Analyzing '{target_func}' in {target_file} ---\n")
+        # print(f"--- Analyzing '{target_func}' in {target_file} ---\n")
 
-        print(f"1. Definition Lines: {inspector.get_definition_lines(target_func)}")
-        print(f"2. Signature Lines: {inspector.get_signature_lines(target_func)}")
-        print(f"3. Docstring Lines: {inspector.get_docstring_lines(target_func)}")
-        print(f"4. Impl (no docstring) Lines: {inspector.get_implementation_without_docstring_lines(target_func)}")
+        # print(f"1. Definition Lines: {inspector.get_definition_lines(target_func)}")
+        # print(f"2. Signature Lines: {inspector.get_signature_lines(target_func)}")
+        # print(f"3. Docstring Lines: {inspector.get_docstring_lines(target_func)}")
+        # print(f"4. Impl (no docstring) Lines: {inspector.get_implementation_without_docstring_lines(target_func)}")
         
         # Note: Git commands will only work if this file is actually inside a git repo
-        print("\n5. Git Signature History:\n", inspector.get_git_history_signature(target_func))
-        print("\n6. Git Docstring History:\n", inspector.get_git_history_docstring(target_func))
-        print("\n7. Git Body History:\n", inspector.get_git_history_body(target_func))
+        # print("\n5. Git Signature History:\n", inspector.get_git_history_signature(target_func))
+        # print("\n6. Git Docstring History:\n", inspector.get_git_history_docstring(target_func))
+        # print("\n7. Git Body History:\n", inspector.get_git_history_body(target_func))
+
+        return inspector.get_git_history_docstring(target_func)
 
     except Exception as e:
         print(f"Error: {e}")
