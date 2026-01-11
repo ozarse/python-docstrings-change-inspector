@@ -346,7 +346,7 @@ class CodeInspector:
         if date_body > date_sig and date_body > date_doc:
             warnings.append(
                 f"Check the docstring or function, as the body was updated. "
-                f"(Body commit: {hash_sig[0:8]}...)"
+                f"(Body commit: {hash_sig})"
             )
 
         # Condition B: If the signature was updated, and the docstring was not updated afterward
@@ -354,7 +354,7 @@ class CodeInspector:
         if date_sig > date_doc:
             warnings.append(
                 f"Check the docstring, as the signature was updated. "
-                f"(Signature commit: {hash_sig[0:8]}...)"
+                f"(Signature commit: {hash_sig})"
             )
 
         return warnings
