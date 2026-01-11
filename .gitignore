@@ -68,4 +68,4 @@ coverage.xml
 *.cover
 .hypothesis/
 
-test_script.py
+*.ipynb
