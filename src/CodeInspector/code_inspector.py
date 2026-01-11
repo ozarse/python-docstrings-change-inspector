@@ -108,6 +108,7 @@ class CodeInspector:
         nodes = self._find_nodes(name)
         ranges = []
 
+        # This makes a change as a test.
         for node in nodes:
             start, end = self._get_node_range(node)
 
